@@ -1,115 +1,73 @@
 (ns grid.renderer
-  (require [quil.core :as q #?@(:cljs [:include-macros true])]
+  (:require [quil.core :as q #?@(:cljs [:include-macros true])]
            [quil.middleware :as m]
+            [grid.quil-hex :as qh]
            [grid.hex :as hex]))
 
 (defn setup []
   (do (q/smooth)
       (q/frame-rate 100)
       (q/background 200)
-      { :board (hex/circle [0 0] 4) }))
+      { :board (into #{} (hex/circle [0 0] 4))
+       :world-radius 10 }))
 
-(defn draw-hex []
-  (doseq [[[xi yi] [xf yf]] hex/edges]
-    (q/line xi yi xf yf)))
-
-(defn fill-hex []
-  (doseq [[[xi yi] [xf yf]] hex/edges]
-    (q/triangle 0 0 xi yi xf yf)))
-
-(defn draw-coords [i j k]
-  (q/text-align :center :center)
-  (q/push-matrix)
-  (apply q/translate (map #(* 0.7 %) hex/x-axis))
-  (q/scale 0.025 -0.025)
-  (q/text (str i) 0 0)
-  (q/pop-matrix)
-
-  (q/push-matrix)
-  (apply q/translate (map #(* 0.7 %) hex/y-axis))
-  (q/scale 0.025 -0.025)
-  (q/text (str j) 0 0)
-  (q/pop-matrix)
-
-  (q/push-matrix)
-  (apply q/translate (map #(* 0.7 %) hex/z-axis))
-  (q/scale 0.025 -0.025)
-  (q/text (str k) 0 0)
-  (q/pop-matrix))
-
-(defn draw-axes []
-  (q/stroke 255 0 0)
-  (q/line 0 0 (hex/x-axis 0) (hex/x-axis 1))
-  (q/stroke 0 255 0)
-  (q/line 0 0 (hex/y-axis 0) (hex/y-axis 1))
-  (q/stroke 0 0 255)
-  (q/line 0 0 (hex/z-axis 0) (hex/z-axis 1)))
-
-(defn draw [{ :keys [board selected hovered] }]
+(defn draw [{ :keys [board selected hovered world-radius] }]
   (let [w (q/width)
         h (q/height)
-        min-dim (min w h)
-        dim 20]
+        aspect (double (/ w h))
+        half-dim (* 0.5 world-radius)
+        dw (if (< 1 aspect) (* aspect half-dim) half-dim)
+        dh (if (> 1 aspect) (* aspect half-dim) half-dim)
+        min-dim (min w h)]
     (do
       (q/background 0 0 0)
       (q/translate (* 0.5 w) (* 0.5 h))
       (q/scale 1 -1)
-      (q/scale (/ min-dim dim))
-      (q/stroke-weight (/ dim min-dim))
+      (q/scale (/ min-dim world-radius))
+      (q/stroke-weight (/ world-radius min-dim))
 
       (when hovered
         (q/fill 255 255 0)
-        (q/stroke 255 255 0)
-        (q/push-matrix)
-        (apply q/translate (apply hex/hex->pixel hovered))
-        (fill-hex)
-        (q/pop-matrix))
+        (qh/draw-hex hovered))
 
       (when selected
         (q/fill 255 0 0)
-        (q/stroke 255 0 0)
-        (q/push-matrix)
-        (apply q/translate (apply hex/hex->pixel selected))
-        (fill-hex)
-        (q/pop-matrix))
+        (qh/draw-hex selected))
 
       (when (and selected hovered)
         (q/fill 255 0 0)
-        (q/stroke 255 0 0)
-        (doseq [h (hex/line-to selected hovered)]
-          (q/push-matrix)
-          (apply q/translate (apply hex/hex->pixel h))
-          (fill-hex)
-          (q/pop-matrix)))
+        (doseq [h (hex/line-until selected hovered)]
+          (qh/draw-hex h)))
 
+      (q/stroke-int 255)
       (q/fill 255)
-      (q/stroke 255)
-      (doseq [[i j] board :let [k (- (+ i j))]]
-        (q/push-matrix)
-        (apply q/translate (hex/hex->pixel i j k))
-        (draw-coords i j k)
-        (draw-hex)
-        (q/pop-matrix)))))
+      (q/no-fill)
+      (doseq [c board
+              :let [sc (hex/cube->hex c)]
+              :when (and (<= (Math/abs (sc 0)) dw)
+                         (<= (Math/abs (sc 1)) dh))]
+        (q/with-translation sc
+          (apply qh/draw-coords (hex/cube c))
+          (qh/draw-hex-shape))))))
 
 (defn do-update [state] state)
 
-(defn mouse-clicked [state {:keys [x y p-x p-y]}]
-  (let [w (q/width)
-        h (q/height)
+(defn screen->axial [px py dim]
+  (let [w (q/width) h (q/height)
         min-dim (min w h)
-        dim 20
-        i (/ (- x (* w 0.5)) (/ min-dim dim))
-        j (/ (- (- y (* h 0.5))) (/ min-dim dim))]
-    (into state { :selected (hex/cube-round (hex/pixel->hex i j)) })))
+        i (/ (- px (* w 0.5)) (/ min-dim dim))
+        j (/ (- (- py (* h 0.5))) (/ min-dim dim))]
+    (-> [i j] hex/hex->cube hex/cube-round)))
 
-(defn mouse-moved [state {:keys [x y p-x p-y]}]
-  (let [w (q/width)
-        h (q/height)
-        min-dim (min w h)
-        dim 20
-        i (/ (- x (* w 0.5)) (/ min-dim dim))
-        j (/ (- (- y (* h 0.5))) (/ min-dim dim))]
-    (into state { :hovered (hex/cube-round (hex/pixel->hex i j)) })))
+(defn mouse-clicked [{ :keys [board world-radius] :as state} {:keys [x y]}]
+  (if-let [hex (board (screen->axial x y world-radius))]
+    (into state { :selected hex })
+    (dissoc state :selected)))
+
+(defn mouse-moved [{ :keys [board world-radius] :as state} {:keys [x y]}]
+  (if-let [hex (board (screen->axial x y world-radius))]
+    (into state { :hovered hex })
+    (dissoc state :hovered)))
 
 (defn launch-sketch [{:keys[width height host]}]
   (q/sketch
@@ -123,7 +81,7 @@
     :size [width height]
     #?@(:cljs [:host host])))
 
-#?(:clj (launch-sketch { :width 640 :height 480 }))
+;#?(:clj (launch-sketch { :width 640 :height 480 }))
 
 #?(:cljs (defn ^:export launch-app[host width height]
            (launch-sketch { :width width :height height :host host})))
