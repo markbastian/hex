@@ -1,11 +1,23 @@
 (ns grid.hex
   (:require [vecmath.vec :as v]))
 
+(defn basis [b]
+  (let [ortho-z (v/normalize (reduce v/add [v/x-axis v/y-axis v/z-axis]))]
+    (if b
+      (let [ortho-x (v/normalize (v/cross v/y-axis ortho-z))
+            ortho-y (v/normalize (v/cross ortho-z ortho-x))]
+        {:ortho-x ortho-x :ortho-y ortho-y :ortho-z ortho-z })
+      (let [ortho-y (v/normalize (v/cross ortho-z v/y-axis))
+            ortho-x (v/normalize (v/cross ortho-y ortho-z))]
+        {:ortho-x ortho-x :ortho-y ortho-y :ortho-z ortho-z }))))
+
 ;http://www.redblobgames.com/grids/hexagons/
 ;http://keekerdc.com/2011/03/hexagon-grids-coordinate-systems-and-distance-calculations/
 (def ortho-z (v/normalize (reduce v/add [v/x-axis v/y-axis v/z-axis])))
 (def ortho-x (v/normalize (v/cross v/y-axis ortho-z)))
 (def ortho-y (v/normalize (v/cross ortho-z ortho-x)))
+;(def ortho-y (v/normalize (v/cross ortho-z v/y-axis)))
+;(def ortho-x (v/normalize (v/cross ortho-y ortho-z)))
 
 (def hex-x (v/dcos v/x-axis [ortho-x ortho-y]))
 (def hex-y (v/dcos v/y-axis [ortho-x ortho-y]))

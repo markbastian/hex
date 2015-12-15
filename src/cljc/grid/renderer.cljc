@@ -2,7 +2,7 @@
   (:require [quil.core :as q #?@(:cljs [:include-macros true])]
            [quil.middleware :as m]
             [grid.quil-hex :as qh]
-           [grid.hex :as hex]))
+            [grid.hex :as hex]))
 
 (defn setup []
   (do (q/smooth)
@@ -81,7 +81,7 @@
     :size [width height]
     #?@(:cljs [:host host])))
 
-;#?(:clj (launch-sketch { :width 640 :height 480 }))
+#?(:clj (launch-sketch { :width 640 :height 480 }))
 
 #?(:cljs (defn ^:export launch-app[host width height]
            (launch-sketch { :width width :height height :host host})))
