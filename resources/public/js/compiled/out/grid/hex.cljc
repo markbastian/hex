@@ -1,4 +1,6 @@
 (ns grid.hex
+  "Hexagonal coordinate functions and math. These are all integer
+  coordinate functions."
   (:require [vecmath.vec :as v]))
 
 (defn axial [[i j]] [i j])
@@ -24,6 +26,17 @@
           (->> (/ i n) double (v/lerp f t) cube-round (conj coords)))))))
 
 (defn line-to [f t] (conj (line-until f t) t))
+
+(defn line-til [f t]
+  (let [n (cube-dist f t)]
+    (mapv
+     #(cube-round (v/lerp f t (double (/ % n))))
+     (range 0 (inc n)))))
+
+(cube-dist [0 0] [0 0])
+(= (line-to [0 0] [4 7])
+   (line-til [0 0] [4 7]))
+(cube-dist [0 0] [4 7])
 
 (defn grid [minx maxx miny maxy]
   (for [i (range minx (inc maxx)) j (range miny (inc maxy))] [i j]))

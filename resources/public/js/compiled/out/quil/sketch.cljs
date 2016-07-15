@@ -1,10 +1,10 @@
 (ns quil.sketch
   (:require [quil.util :as u :include-macros true]
-            [quil.middlewares.deprecated-options :refer [deprecated-options]]
+            [quil.middlewares.deprecated-options :as do]
             [goog.dom :as dom]
             [goog.events :as events]
             [goog.events.EventType :as EventType])
-  (:use-macros [quil.sketch :only [with-sketch]]))
+  (:require-macros [quil.sketch]))
 
 (def ^:dynamic
   *applet* nil)
@@ -43,12 +43,12 @@
         (when-let [handler (opts quil-name)]
           (aset prc (name processing-name)
                 (fn []
-                  (with-sketch prc
+                  (quil.sketch/with-sketch prc
                     (handler)))))))
 
 (defn make-sketch [options]
   (let [opts            (->> (:middleware options [])
-                          (cons deprecated-options)
+                          (cons do/deprecated-options)
                           (apply comp)
                           (#(% options))
                           (merge {:size [500 300]}))
@@ -57,18 +57,19 @@
         renderer        (:renderer opts)
         features        (set (:features opts))
 
-        opts (-> opts
-                 (update-in [:setup]
-                            #(fn []
-                               (->> (if renderer [renderer] [])
-                                    (concat sketch-size)
-                                    (apply size))
-                               (when % (%))))
-                 (update-in [:mouse-wheel]
-                            #(when %
-                               (fn []
-                                 ;; -1 need for compability to Clojure version
-                                 (% (* -1 (.-mouseScroll *applet*)))))))
+        setup (fn []
+                (->> (if renderer [renderer] [])
+                     (concat sketch-size)
+                     (apply size))
+                (when (:settings opts) ((:settings opts)))
+                (when (:setup opts) ((:setup opts))))
+        mouse-wheel (when (:mouse-wheel opts)
+                      ;; -1 need for compability with Clojure version
+                      #((:mouse-wheel opts) (* -1 (.-mouseScroll *applet*))))
+
+        opts (assoc opts
+                    :setup setup
+                    :mouse-wheel mouse-wheel)
         attach-function (fn [prc]
                           (bind-handlers prc opts)
                           (set! (.-quil prc) (atom nil))
@@ -77,6 +78,10 @@
     (when (contains? features :global-key-events)
       (aset (aget sketch "options") "globalKeyEvents" true))
     sketch))
+
+(defn destroy-previous-sketch [host-elem]
+  (when-let [proc-obj (.-processing-obj host-elem)]
+    (.exit proc-obj)))
 
 (defn sketch [& opts]
   (let [opts-map (apply hash-map opts)
@@ -88,8 +93,10 @@
           (when-not (= renderer (.-processing-context host-elem))
             (.warn js/console "WARNING: Using different context on one canvas!"))
           (set! (.-processing-context host-elem) renderer))
-        (js/Processing. host-elem (make-sketch opts-map)))
-      (.warn js/console "WARNING: Cannot create sketch. :host is not specified."))))
+        (destroy-previous-sketch host-elem)
+        (set! (.-processing-obj host-elem)
+              (js/Processing. host-elem (make-sketch opts-map))))
+      (.error js/console "ERROR: Cannot create sketch. :host is not specified."))))
 
 (def sketch-init-list (atom (list )))
 
@@ -109,9 +116,13 @@
     (doseq [sk @sketch-init-list]
       (when add-elem?
         (add-canvas (:host-id sk)))
-      ((:fn sk)))))
+      ((:fn sk))))
+  (reset! sketch-init-list []))
 
 (defn add-sketch-to-init-list [sk]
-  (swap! sketch-init-list conj sk))
+  (swap! sketch-init-list conj sk)
+  ; if page already loaded immediately init sketch we just added
+  (when (= (.-readyState js/document) "complete")
+    (init-sketches)))
 
 (events/listenOnce js/window EventType/LOAD init-sketches)
