@@ -1,46 +1,44 @@
 (ns grid.hex
-  "Hexagonal coordinate functions and math. These are all integer
-  coordinate functions."
+  "Hexagonal coordinate functions and math. These are all integer coordinate functions."
   (:require [vecmath.vec :as v]))
 
-(defn axial [[i j]] [i j])
-(defn cube [[i j k :as c]] (if k c [i j (- (+ i j))]))
+(defn axial "Conform input to axial (2 element) representation of hex coords."
+  [[i j]] [i j])
 
-(defn cube-round [h]
-  (let [r (vec (map #(Math/round (double %)) (cube h)))
-        df (map #(Math/abs (- %1 %2)) r (cube h))
+(defn cube "Conform input to cube (3 element) representation of hex coords."
+  [[i j k :as c]]
+  (if k c [i j (- (+ i j))]))
+
+(defn cube-round [coords]
+  (let [r (vec (map #(Math/round (double %)) (cube coords)))
+        df (map #(Math/abs (- %1 %2)) r (cube coords))
         i (first (apply max-key second (map-indexed vector df)))
         fix (- (- (reduce + r) (r i)))]
     (axial (assoc r i fix))))
 
-(defn cube-dist [a b]
-  (apply max (map #(Math/abs (- %1 %2)) (cube a) (cube b))))
+(defn cube-dist [hex-a hex-b]
+  (apply max (map #(Math/abs (- %1 %2)) (cube hex-a) (cube hex-b))))
 
-(defn line-until [f t]
-  (let [n (cube-dist f t)]
-    (loop [i 1 coords [f]]
+(defn lerp [hex-a hex-b d]
+  (cube-round (v/lerp hex-a hex-b d)))
+
+(defn hex-ray-seq [hex-from hex-to]
+  (let [d (cube-dist hex-from hex-to)]
+    (cons
+      hex-from
+      (when (pos? d)
+        (map #(lerp hex-from hex-to (double (/ % d))) (map inc (range)))))))
+
+(defn line-until [hex-from hex-to]
+  (let [n (cube-dist hex-from hex-to)
+        f #(lerp hex-from hex-to (double (/ % n)))]
+    (loop [i 1 coords [hex-from]]
       (if (<= n i)
         coords
-        (recur
-          (inc i)
-          (->> (/ i n) double (v/lerp f t) cube-round (conj coords)))))))
+        (recur (inc i) (conj coords (f i)))))))
 
-(defn line-to [f t] (conj (line-until f t) t))
-
-(defn line-til [f t]
-  (let [n (cube-dist f t)]
-    (mapv
-     #(cube-round (v/lerp f t (double (/ % n))))
-     (range 0 (inc n)))))
-
-(cube-dist [0 0] [0 0])
-(= (line-to [0 0] [4 7])
-   (line-til [0 0] [4 7]))
-(= (line-to [0 0] [0 1])
-   (line-til [0 0] [0 1]))
-(= (line-to [0 0] [0 0])
-   (line-til [0 0] [0 0]))
-(cube-dist [0 0] [4 7])
+(defn line-to [hex-from hex-to]
+  (conj (line-until hex-from hex-to) hex-to))
 
 (defn grid [minx maxx miny maxy]
   (for [i (range minx (inc maxx)) j (range miny (inc maxy))] [i j]))
@@ -50,7 +48,7 @@
         y ((juxt dec identity inc inc identity dec) j)]
     (map vector x y)))
 
-(defn radial-corners[v r]
+(defn radial-corners [v r]
   (->> [0 0] neighbors (map #(v/scale % r)) (map #(v/add % v))))
 
 (defn ring [center radius]
