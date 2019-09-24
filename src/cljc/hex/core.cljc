@@ -1,6 +1,6 @@
-(ns grid.hex
+(ns hex.core
   "Hexagonal coordinate functions and math. These are all integer coordinate functions."
-  (:require [vecmath.vec :as v]))
+  (:require [clojure.core.matrix :refer [add scale add-scaled sub]]))
 
 (defn axial "Conform input to axial (2 element) representation of hex coords."
   [[i j]] [i j])
@@ -20,7 +20,7 @@
   (apply max (map #(Math/abs (- %1 %2)) (cube hex-a) (cube hex-b))))
 
 (defn lerp [hex-a hex-b d]
-  (cube-round (v/lerp hex-a hex-b d)))
+  (cube-round (add-scaled hex-a (sub hex-b hex-a) d)))
 
 (defn hex-ray-seq [hex-from hex-to]
   (let [d (cube-dist hex-from hex-to)]
@@ -49,7 +49,7 @@
     (map vector x y)))
 
 (defn radial-corners [v r]
-  (->> [0 0] neighbors (map #(v/scale % r)) (map #(v/add % v))))
+  (->> [0 0] neighbors (map #(scale % r)) (map #(add % v))))
 
 (defn ring [center radius]
   (if (= radius 0)

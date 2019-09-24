@@ -1,29 +1,33 @@
-(ns grid.fhex
-  (:require [vecmath.vec :as v]))
+(ns hex.fhex
+  (:require [clojure.core.matrix :refer [normalise add dot cross negate scale]]))
 
 ;http://www.redblobgames.com/grids/hexagons/
 ;http://keekerdc.com/2011/03/hexagon-grids-coordinate-systems-and-distance-calculations/
 
+(def x-axis [1 0 0])
+(def y-axis [0 1 0])
+(def z-axis [0 0 1])
+
 (defn ortho-axes [orientation]
-  (let [ortho-z (v/normalize (reduce v/add [v/x-axis v/y-axis v/z-axis]))]
+  (let [ortho-z (normalise (add x-axis y-axis z-axis))]
     (if (= :pointy-topped orientation)
-      (let [ortho-x (v/normalize (v/cross v/y-axis ortho-z))
-            ortho-y (v/normalize (v/cross ortho-z ortho-x))]
+      (let [ortho-x (normalise (cross y-axis ortho-z))
+            ortho-y (normalise (cross ortho-z ortho-x))]
         {:ortho-x ortho-x :ortho-y ortho-y :ortho-z ortho-z })
-      (let [ortho-y (v/normalize (v/cross ortho-z v/y-axis))
-            ortho-x (v/normalize (v/cross ortho-y ortho-z))]
+      (let [ortho-y (normalise (cross ortho-z y-axis))
+            ortho-x (normalise (cross ortho-y ortho-z))]
         {:ortho-x ortho-x :ortho-y ortho-y :ortho-z ortho-z }))))
 
 (defn hex-axes [{:keys [ortho-x ortho-y]}]
-  (let [xy [ortho-x ortho-y]]
-    {:hex-x (v/dcos v/x-axis xy)
-     :hex-y (v/dcos v/y-axis xy)
-     :hex-z (v/dcos v/z-axis xy)}))
+  (letfn [(dcos [v] (mapv #(dot v %) [ortho-x ortho-y]))]
+    {:hex-x (dcos x-axis)
+     :hex-y (dcos y-axis)
+     :hex-z (dcos z-axis)}))
 
 (defn hex-geometry [{:keys [hex-x hex-y hex-z]}]
-  {:hex-corners [hex-x (v/negate hex-z)
-                 hex-y (v/negate hex-x)
-                 hex-z (v/negate hex-y)]})
+  {:hex-corners [hex-x (negate hex-z)
+                 hex-y (negate hex-x)
+                 hex-z (negate hex-y)]})
 
 (defn define-geometry [orientation]
   (-> (ortho-axes orientation)
@@ -47,4 +51,4 @@
        c (- (ortho-y 2) (ortho-y 0))
        d (- (ortho-y 1) (ortho-y 2))
        det (/ 1.0 (- (* a d) (* b c)))]
-    (v/scale [(v/dot [d b] v) (v/dot [c a] v)] det)))
+    (scale [(dot [d b] v) (dot [c a] v)] det)))
