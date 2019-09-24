@@ -27,7 +27,7 @@
     (cons
       hex-from
       (when (pos? d)
-        (map #(lerp hex-from hex-to (double (/ % d))) (map inc (range)))))))
+        (map #(lerp hex-from hex-to (double (/ (inc %) d))) (range))))))
 
 (defn line-until [hex-from hex-to]
   (let [n (cube-dist hex-from hex-to)
